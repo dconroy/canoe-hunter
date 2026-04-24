@@ -94,4 +94,11 @@ export const searchTerms = [
   '14 foot canoe',
   '13 ft canoe',
   '14 ft canoe',
+  'light rowboat',
+  'rowboat',
+  'aluminum rowboat',
+  'fiberglass rowboat',
+  '13 foot rowboat',
+  '14 foot rowboat',
+  'oarlocks rowboat',
 ];

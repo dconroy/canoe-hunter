@@ -58,6 +58,8 @@ export interface StoredListing extends Listing {
   lastSeenAt: string;
 }
 
+export type BoatAnalysisDetails = Record<string, string | number | null>;
+
 export interface ScoreResult {
   matchScore: number;
   likelyModel: string;
@@ -74,7 +76,11 @@ export interface ScoreResult {
   offerRangeTop: number | null;
   offerStrategy: string;
   photoFindings: string[];
+  photoQualityScore: number;
+  photoQualityAssessment: string;
+  photoCountAnalyzed: number;
   materialGuess: string;
+  analysisDetails: BoatAnalysisDetails;
   priceAssessment: string;
   reasonsForMatch: string[];
   redFlags: string[];
@@ -117,7 +123,11 @@ export interface DashboardListing {
   offerRangeTop: number | null;
   offerStrategy: string | null;
   photoFindings: string[];
+  photoQualityScore: number | null;
+  photoQualityAssessment: string | null;
+  photoCountAnalyzed: number | null;
   materialGuess: string | null;
+  analysisDetails: BoatAnalysisDetails;
   priceAssessment: string | null;
   reasonsForMatch: string[];
   redFlags: string[];

@@ -159,15 +159,15 @@ export function isRelevantSummary(summary: ListingSummary): boolean {
 
   const title = summary.title.toLowerCase();
 
+  if (hasDealbreakerDamageLanguage(title)) {
+    return false;
+  }
+
   if (/\b(wanted|want to buy|wtb|iso|in search of|looking for)\b/.test(title)) {
     return false;
   }
 
-  if (/\b(kayak|kayaks|paddleboard|sup|raft|inflatable|dinghy|rowboat|jon boat)\b/.test(title)) {
-    return false;
-  }
-
-  if (/\b(aluminum|alum|grumman)\b/.test(title)) {
+  if (/\b(kayak|kayaks|paddleboard|sup|raft|inflatable|dinghy|jon boat)\b/.test(title)) {
     return false;
   }
 
@@ -175,12 +175,23 @@ export function isRelevantSummary(summary: ListingSummary): boolean {
     return false;
   }
 
-  if (/\b(paddle|paddles|oar|oars)\b/.test(title) && !/\b(canoe|sportspal|radisson|ramx|ram-x|old town)\b/.test(title)) {
+  if (
+    /\b(paddle|paddles|oar|oars)\b/.test(title) &&
+    !/\b(canoe|rowboat|sportspal|radisson|ramx|ram-x|old town)\b/.test(title)
+  ) {
     return false;
   }
 
-  return /\b(canoe|sportspal|radisson|ramx|ram-x|royalex|fiberglass|old town|hunter 14|stillwater|osprey 140)\b/.test(
+  return /\b(canoe|rowboat|sportspal|radisson|ramx|ram-x|royalex|fiberglass|aluminum|alum|grumman|old town|hunter 14|stillwater|osprey 140)\b/.test(
     title,
+  );
+}
+
+export function hasDealbreakerDamageLanguage(value: string | null | undefined): boolean {
+  const text = (value ?? '').toLowerCase();
+
+  return /\b(damaged?|damage|broken|cracked?|cracks?|hole|holes|leaks?|leaking|needs repair|repair needed|project|for parts|patched|patch|soft spots?|delamination|delaminated|serious wear|bad wear|unsafe)\b/.test(
+    text,
   );
 }
 
@@ -195,25 +206,42 @@ export async function fetchListingDetails(summary: ListingSummary): Promise<List
   const description = cleanOptional($('#postingbody').text().replace('QR Code Link to This Post', ''));
   const imageUrls = new Set<string>();
 
-  $('img').each((_, image) => {
-    const src = $(image).attr('src');
-    if (src?.startsWith('http')) {
-      imageUrls.add(src);
-    }
-  });
+  $('a.thumb, a.gallery-item, a[href*="images.craigslist.org"], img, [data-imgsrc], [data-full], [data-large]').each(
+    (_, image) => {
+      const element = $(image);
+      const candidates = [
+        element.attr('data-full'),
+        element.attr('data-large'),
+        element.attr('data-imgsrc'),
+        element.attr('href'),
+        element.attr('src'),
+      ];
 
-  $('[data-imgsrc]').each((_, image) => {
-    const src = $(image).attr('data-imgsrc');
-    if (src?.startsWith('http')) {
-      imageUrls.add(src);
-    }
-  });
+      for (const candidate of candidates) {
+        const normalized = normalizeCraigslistImageUrl(candidate);
+
+        if (normalized) {
+          imageUrls.add(normalized);
+        }
+      }
+    },
+  );
 
   return {
     ...summary,
     description,
     imageUrls: [...imageUrls],
   };
+}
+
+function normalizeCraigslistImageUrl(value: string | undefined): string | null {
+  if (!value?.startsWith('http') || !value.includes('images.craigslist.org')) {
+    return null;
+  }
+
+  return value
+    .replace(/_50x50c(?=\.(jpg|jpeg|png|webp)$)/i, '_600x450')
+    .replace(/_300x300(?=\.(jpg|jpeg|png|webp)$)/i, '_600x450');
 }
 
 function cleanOptional(value: string | undefined | null): string | null {

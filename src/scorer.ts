@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { AppConfig, Listing, ScoreResult } from './types.js';
+import { AppConfig, BoatAnalysisDetails, Listing, ScoreResult } from './types.js';
 import { truncate } from './utils.js';
 
 const fallbackSellerMessage =
@@ -43,6 +43,7 @@ export class ListingScorer {
 }
 
 function buildUserContent(listing: Listing): OpenAI.Chat.Completions.ChatCompletionContentPart[] {
+  const imageUrls = [...new Set(listing.imageUrls)];
   const listingText = JSON.stringify(
     {
       source: listing.source,
@@ -55,8 +56,8 @@ function buildUserContent(listing: Listing): OpenAI.Chat.Completions.ChatComplet
       latitude: listing.latitude,
       longitude: listing.longitude,
       description: truncate(listing.description ?? '', 5000),
-      imageCount: listing.imageUrls.length,
-      imageUrls: listing.imageUrls.slice(0, 8),
+      imageCount: imageUrls.length,
+      imageUrls,
     },
     null,
     2,
@@ -65,13 +66,13 @@ function buildUserContent(listing: Listing): OpenAI.Chat.Completions.ChatComplet
   return [
     {
       type: 'text',
-      text: `Extract canoe details from this Craigslist posting. Use the photos as evidence when available, but label anything inferred from photos as estimated.\n\n${listingText}`,
+      text: `Extract canoe details from this Craigslist posting. Analyze every attached photo for condition, visible damage, hull shape, material clues, color, gear, and listing quality. Label anything inferred from photos as estimated.\n\n${listingText}`,
     },
-    ...listing.imageUrls.slice(0, 4).map((url) => ({
+    ...imageUrls.map((url) => ({
       type: 'image_url' as const,
       image_url: {
         url,
-        detail: 'low' as const,
+        detail: 'auto' as const,
       },
     })),
   ];
@@ -97,7 +98,52 @@ Return only valid JSON with exactly these fields:
   "offerRangeTop": number or null,
   "offerStrategy": string,
   "photoFindings": string[],
+  "photoQualityScore": number from 0 to 100,
+  "photoQualityAssessment": string,
+  "photoCountAnalyzed": number,
   "materialGuess": "Fiberglass" | "RamX" | "Royalex" | "ABS" | "Aluminum" | "Unknown",
+  "analysisDetails": {
+    "BOAT_TYPE": string,
+    "MAKE_BRAND": string,
+    "MODEL": string,
+    "YEAR": number or "unknown",
+    "LENGTH_FT": number or null,
+    "WEIGHT_LB": number or "estimate" or null,
+    "PRICE_USD": number or null,
+    "NEGOTIABLE": "yes" | "no" | "unknown",
+    "MATERIAL": "aluminum" | "fiberglass" | "poly" | "other" | "unknown",
+    "HULL_SHAPE": "flat" | "shallow-V" | "rounded" | "unknown",
+    "KEEL": "yes" | "no" | "unknown",
+    "SPONSONS": "yes" | "no" | "unknown",
+    "PRIMARY_STABILITY": "poor" | "average" | "good" | "great" | "unknown",
+    "SECONDARY_STABILITY": "poor" | "average" | "good" | "great" | "unknown",
+    "STABILITY_SCORE_1_10": number or null,
+    "INTERIOR_LAYOUT": "open" | "molded" | "other" | "unknown",
+    "TWO_PERSON": "yes" | "no" | "conditional" | "unknown",
+    "FACING_SEATS_POSSIBLE": "yes" | "no" | "unknown",
+    "FISHING_FRIENDLY": "poor" | "average" | "good" | "great" | "unknown",
+    "GEAR_SPACE": "limited" | "moderate" | "ample" | "unknown",
+    "OARLOCKS": "yes" | "no" | "unknown",
+    "OARS_INCLUDED": "yes" | "no" | "unknown",
+    "DUAL_ROW_CAPABLE": "yes" | "no" | "modifiable" | "unknown",
+    "PADDLES_INCLUDED": "yes" | "no" | "unknown",
+    "CONDITION": "poor" | "fair" | "good" | "excellent" | "unknown",
+    "HULL_INTEGRITY": "compromised" | "questionable" | "solid" | "unknown",
+    "DENTS": "none" | "minor" | "moderate" | "severe" | "unknown",
+    "CRACKS": "none" | "minor" | "major" | "unknown",
+    "OIL_CANNING": "yes" | "no" | "unknown",
+    "REPAIRS_VISIBLE": "yes" | "no" | "unknown",
+    "REPAINTED_BOTTOM": "yes" | "no" | "unknown",
+    "MODIFIABLE": "poor" | "average" | "good" | "great" | "unknown",
+    "FLAT_FLOOR": "yes" | "no" | "unknown",
+    "MOUNTING_POINTS": "yes" | "no" | "unknown",
+    "FOAMABLE_INTERIOR": "yes" | "no" | "unknown",
+    "INCLUDES_LIFE_JACKETS": "yes" | "no" | "unknown",
+    "INCLUDES_TRAILER": "yes" | "no" | "unknown",
+    "PORTAGE_SCORE_1_10": number or null,
+    "MATCH_SCORE_1_10": number or null,
+    "NOTES": string
+  },
   "priceAssessment": string,
   "reasonsForMatch": string[],
   "redFlags": string[],
@@ -108,8 +154,11 @@ Return only valid JSON with exactly these fields:
 
 Buyer preferences:
 - Price must be ${maxPrice} or less. A listing at ${maxPrice} must look like it is in good shape.
-- Prefer 13 to 14 feet.
-- Avoid 15+ foot models unless length is unclear and the rest of the listing is unusually promising.
+- Target boat type is canoe or light rowboat.
+- Use case: "Beer-Forward Fishing Canoe" - a stable, sturdy, lightweight, stashable, low-cost fishing platform for two people. The goal is not sporty paddling; it is relaxed pond fishing with four lines out, keeping movement and line tension, handling wind, and letting either person take over rowing.
+- Ideal setup: two people sit near opposite ends facing the middle. Oarlocks can be installed on either side so either person can row/pass off oars without tangling lines.
+- Prefer at least 13 feet; ideal is 14-15 feet if weight and handling stay reasonable.
+- Target weight is 60 lb or less; ideal is 40-55 lb.
 - Must not obviously leak. Any known leak is a dealbreaker unless the seller explicitly says it has been professionally repaired and tested.
 - No serious underside wear. Cracks, holes, soft spots, major gouges, delamination, oil-canning damage, patched damage, or "needs repair" are dealbreakers.
 - Seats do not matter because the buyer will retrofit them.
@@ -123,6 +172,9 @@ Preferred models:
 - Old Town Stillwater 14, fiberglass composite.
 - Old Town Osprey 140, Royalex or ABS plastic.
 - 13-14' fiberglass models from random brands.
+- Light rowboats are acceptable if stable, portable, fishable, and modifiable.
+- Material preference for the broader target: aluminum > fiberglass > poly, while still recognizing RamX/Royalex/ABS canoe matches.
+- Bonus for boats that look easy to stash, carry, drag gently to a pond, and modify with simple oarlocks/seat changes.
 
 Extraction requirements:
 - makeModel: specific make/model if known, otherwise best guess like "Unknown 13 ft fiberglass canoe".
@@ -136,13 +188,33 @@ Extraction requirements:
 - listPrice: numeric listing price if present.
 - offerRangeBottom and offerRangeTop: recommended opening/ceiling offer in dollars based on price, condition, distance, model desirability, and risk. For damaged or poor matches, keep offers low or null if not worth pursuing.
 - offerStrategy: short plain-English rationale for the offer range.
-- photoFindings: observable details from photos, such as hull shape, keel, bottom wear, seats, paddles, material clues, or damage. Do not invent photo details if images are absent or unclear.
+- photoFindings: observable details extracted from all provided photos, such as hull shape, keel, bottom wear, seats, paddles, material clues, exterior color, repairs, cracks, deep gouges, or visible damage. Be specific about which findings come from photos.
+- photoQualityScore: 0-100 score for how useful the photos are for judging the canoe. Score high only when photos show multiple useful angles including exterior hull and bottom/underside. Score low when photos are missing, blurry, too few, mostly closeups, or fail to show condition-critical areas.
+- photoQualityAssessment: concise explanation of the photoQualityScore and what important angles are missing.
+- photoCountAnalyzed: number of photos you actually inspected.
+- If only one usable photo is available, subtract 5 points from matchScore for uncertainty. Mention the single-photo penalty in redFlags or priceAssessment. Do not let this penalty override hard caps.
+- analysisDetails: fill every key. Use "unknown" or null where evidence is missing. Infer carefully from text and photos, and do not invent certainty.
+
+Checklist scoring guidance:
+- Strong positives: canoe/light rowboat, flat or shallow-V hull, good/great primary stability, average/good secondary stability, open interior, two-person capable, facing seats possible, fishing friendly, moderate/ample gear space, oarlocks/oars, paddles, dual-row capable/modifiable, good/great modifiability, easy oarlock retrofit, can be rowed from either end, flat floor, mounting points, foamable interior, solid hull integrity, no cracks, no severe dents, no suspicious repainted bottom, portable/stashable weight.
+- Strong negatives: compromised/questionable hull integrity, major cracks, severe dents, oil-canning, visible repairs, repainted bottom, poor stability, molded interior that prevents retrofit, too heavy to portage, poor fishing layout, not two-person capable.
+- Portage score should combine weight, length, shape, and carry practicality.
+- Match score 1-10 should summarize the buyer fit independent of the 0-100 alert score.
+- Favor boats that solve the "two rowers facing inward while managing multiple fishing lines" use case. Penalize boats that only make sense as solo paddlers or have layouts that would tangle lines or block oarlock retrofit.
+
+Distance scoring adjustment:
+- Use distanceMiles from the listing when present.
+- Add up to +10 points for close listings: +10 for 0-15 miles, +7 for 16-30 miles, +4 for 31-50 miles.
+- Taper scores beyond 50 miles without over-penalizing otherwise strong listings: 0 for 51-75 miles, -2 for 76-100 miles, -5 for 101-130 miles, -8 for over 130 miles.
+- If distance is unknown, apply no distance adjustment.
+- Apply distance after evaluating model, price, condition, and photos, but never let distance override hard score caps or make a damaged/poor listing alert-worthy.
+- Mention the distance adjustment in reasonsForMatch or redFlags when it materially changes the score.
 
 Score strictly and obey these hard caps:
 - 0-10: wanted/ISO posts, kayaks, inflatables, paddle-only listings, or listings that are not selling a canoe.
 - 0-15: obvious leaks, holes, cracked hulls, serious underside wear, soft spots, delamination, or unsafe structural damage.
 - 0-25: any listing that says it needs repair, has patched damage, has unknown leak status but visible damage, or sounds like a project boat.
-- 0-35: aluminum canoes, 15+ foot canoes, or listings over ${maxPrice}.
+- 0-35: listings over ${maxPrice}, non-portable boats, or boats with poor retrofit/fishing suitability.
 - 0-45: vague listings with no useful condition, length, material, or model details.
 - 70+: only clean, plausible 13-14 foot candidates under ${maxPrice} with no leak/damage concerns.
 
@@ -170,7 +242,11 @@ function normalizeScore(raw: Partial<ScoreResult>): ScoreResult {
     offerRangeTop: nullableDollars(raw.offerRangeTop),
     offerStrategy: stringOrUnknown(raw.offerStrategy),
     photoFindings: arrayOfStrings(raw.photoFindings),
+    photoQualityScore: clampScore(raw.photoQualityScore),
+    photoQualityAssessment: stringOrUnknown(raw.photoQualityAssessment),
+    photoCountAnalyzed: nonNegativeInteger(raw.photoCountAnalyzed),
     materialGuess: normalizeMaterial(raw.materialGuess),
+    analysisDetails: normalizeAnalysisDetails(raw.analysisDetails),
     priceAssessment: stringOrUnknown(raw.priceAssessment),
     reasonsForMatch: arrayOfStrings(raw.reasonsForMatch),
     redFlags: arrayOfStrings(raw.redFlags),
@@ -237,6 +313,66 @@ function nullableDollars(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : null;
 }
+
+function normalizeAnalysisDetails(value: unknown): BoatAnalysisDetails {
+  const source = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  const details: BoatAnalysisDetails = {};
+
+  for (const key of analysisDetailKeys) {
+    const raw = source[key];
+    details[key] = typeof raw === 'number' || typeof raw === 'string' ? raw : raw === null ? null : 'unknown';
+  }
+
+  return details;
+}
+
+function nonNegativeInteger(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 0;
+}
+
+const analysisDetailKeys = [
+  'BOAT_TYPE',
+  'MAKE_BRAND',
+  'MODEL',
+  'YEAR',
+  'LENGTH_FT',
+  'WEIGHT_LB',
+  'PRICE_USD',
+  'NEGOTIABLE',
+  'MATERIAL',
+  'HULL_SHAPE',
+  'KEEL',
+  'SPONSONS',
+  'PRIMARY_STABILITY',
+  'SECONDARY_STABILITY',
+  'STABILITY_SCORE_1_10',
+  'INTERIOR_LAYOUT',
+  'TWO_PERSON',
+  'FACING_SEATS_POSSIBLE',
+  'FISHING_FRIENDLY',
+  'GEAR_SPACE',
+  'OARLOCKS',
+  'OARS_INCLUDED',
+  'DUAL_ROW_CAPABLE',
+  'PADDLES_INCLUDED',
+  'CONDITION',
+  'HULL_INTEGRITY',
+  'DENTS',
+  'CRACKS',
+  'OIL_CANNING',
+  'REPAIRS_VISIBLE',
+  'REPAINTED_BOTTOM',
+  'MODIFIABLE',
+  'FLAT_FLOOR',
+  'MOUNTING_POINTS',
+  'FOAMABLE_INTERIOR',
+  'INCLUDES_LIFE_JACKETS',
+  'INCLUDES_TRAILER',
+  'PORTAGE_SCORE_1_10',
+  'MATCH_SCORE_1_10',
+  'NOTES',
+];
 
 function arrayOfStrings(value: unknown): string[] {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : [];

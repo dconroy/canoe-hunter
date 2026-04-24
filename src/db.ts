@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { AppConfig, DashboardListing, Listing, ScoreResult, StoredListing } from './types.js';
+import { AppConfig, BoatAnalysisDetails, DashboardListing, Listing, ScoreResult, StoredListing } from './types.js';
 import { asJsonArray, nowIso, parseJsonArray } from './utils.js';
 
 type ListingRow = {
@@ -36,7 +36,11 @@ type DashboardListingRow = ListingRow & {
   offerRangeTop: number | null;
   offerStrategy: string | null;
   photoFindings: string | null;
+  photoQualityScore: number | null;
+  photoQualityAssessment: string | null;
+  photoCountAnalyzed: number | null;
   materialGuess: string | null;
+  analysisDetails: string | null;
   priceAssessment: string | null;
   reasonsForMatch: string | null;
   redFlags: string | null;
@@ -99,7 +103,11 @@ export class CanoeHunterDb {
         offerRangeTop INTEGER NULL,
         offerStrategy TEXT,
         photoFindings TEXT,
+        photoQualityScore INTEGER,
+        photoQualityAssessment TEXT,
+        photoCountAnalyzed INTEGER,
         materialGuess TEXT,
+        analysisDetails TEXT,
         priceAssessment TEXT,
         reasonsForMatch TEXT,
         redFlags TEXT,
@@ -132,6 +140,10 @@ export class CanoeHunterDb {
     this.addColumnIfMissing('scores', 'offerRangeTop', 'INTEGER NULL');
     this.addColumnIfMissing('scores', 'offerStrategy', 'TEXT');
     this.addColumnIfMissing('scores', 'photoFindings', 'TEXT');
+    this.addColumnIfMissing('scores', 'photoQualityScore', 'INTEGER');
+    this.addColumnIfMissing('scores', 'photoQualityAssessment', 'TEXT');
+    this.addColumnIfMissing('scores', 'photoCountAnalyzed', 'INTEGER');
+    this.addColumnIfMissing('scores', 'analysisDetails', 'TEXT');
   }
 
   private addColumnIfMissing(tableName: string, columnName: string, definition: string): void {
@@ -263,7 +275,11 @@ export class CanoeHunterDb {
           offerRangeTop,
           offerStrategy,
           photoFindings,
+          photoQualityScore,
+          photoQualityAssessment,
+          photoCountAnalyzed,
           materialGuess,
+          analysisDetails,
           priceAssessment,
           reasonsForMatch,
           redFlags,
@@ -288,7 +304,11 @@ export class CanoeHunterDb {
           @offerRangeTop,
           @offerStrategy,
           @photoFindings,
+          @photoQualityScore,
+          @photoQualityAssessment,
+          @photoCountAnalyzed,
           @materialGuess,
+          @analysisDetails,
           @priceAssessment,
           @reasonsForMatch,
           @redFlags,
@@ -313,7 +333,11 @@ export class CanoeHunterDb {
           offerRangeTop = excluded.offerRangeTop,
           offerStrategy = excluded.offerStrategy,
           photoFindings = excluded.photoFindings,
+          photoQualityScore = excluded.photoQualityScore,
+          photoQualityAssessment = excluded.photoQualityAssessment,
+          photoCountAnalyzed = excluded.photoCountAnalyzed,
           materialGuess = excluded.materialGuess,
+          analysisDetails = excluded.analysisDetails,
           priceAssessment = excluded.priceAssessment,
           reasonsForMatch = excluded.reasonsForMatch,
           redFlags = excluded.redFlags,
@@ -340,7 +364,11 @@ export class CanoeHunterDb {
         offerRangeTop: score.offerRangeTop,
         offerStrategy: score.offerStrategy,
         photoFindings: asJsonArray(score.photoFindings),
+        photoQualityScore: score.photoQualityScore,
+        photoQualityAssessment: score.photoQualityAssessment,
+        photoCountAnalyzed: score.photoCountAnalyzed,
         materialGuess: score.materialGuess,
+        analysisDetails: JSON.stringify(score.analysisDetails),
         priceAssessment: score.priceAssessment,
         reasonsForMatch: asJsonArray(score.reasonsForMatch),
         redFlags: asJsonArray(score.redFlags),
@@ -411,7 +439,11 @@ export class CanoeHunterDb {
           scores.offerRangeTop,
           scores.offerStrategy,
           scores.photoFindings,
+          scores.photoQualityScore,
+          scores.photoQualityAssessment,
+          scores.photoCountAnalyzed,
           scores.materialGuess,
+          scores.analysisDetails,
           scores.priceAssessment,
           scores.reasonsForMatch,
           scores.redFlags,
@@ -422,7 +454,18 @@ export class CanoeHunterDb {
         FROM listings
         LEFT JOIN scores ON scores.listingUrl = listings.url
         LEFT JOIN alerts ON alerts.listingUrl = listings.url
-        ORDER BY listings.firstSeenAt DESC
+        WHERE lower(listings.title) NOT GLOB '*damag*'
+          AND lower(listings.title) NOT GLOB '*broken*'
+          AND lower(listings.title) NOT GLOB '*crack*'
+          AND lower(listings.title) NOT GLOB '*leak*'
+          AND lower(listings.title) NOT GLOB '*needs repair*'
+          AND lower(listings.title) NOT GLOB '*repair needed*'
+          AND lower(listings.title) NOT GLOB '*project*'
+          AND lower(listings.title) NOT GLOB '*for parts*'
+          AND lower(listings.title) NOT GLOB '*patched*'
+          AND lower(listings.title) NOT GLOB '*soft spot*'
+          AND lower(listings.title) NOT GLOB '*delaminat*'
+        ORDER BY scores.matchScore IS NULL, scores.matchScore DESC, listings.firstSeenAt DESC
         LIMIT ?
       `,
       )
@@ -445,7 +488,11 @@ export class CanoeHunterDb {
       offerRangeTop: row.offerRangeTop,
       offerStrategy: row.offerStrategy,
       photoFindings: parseJsonArray(row.photoFindings),
+      photoQualityScore: row.photoQualityScore,
+      photoQualityAssessment: row.photoQualityAssessment,
+      photoCountAnalyzed: row.photoCountAnalyzed,
       materialGuess: row.materialGuess,
+      analysisDetails: parseJsonObject(row.analysisDetails),
       priceAssessment: row.priceAssessment,
       reasonsForMatch: parseJsonArray(row.reasonsForMatch),
       redFlags: parseJsonArray(row.redFlags),
@@ -472,5 +519,18 @@ export class CanoeHunterDb {
       firstSeenAt: row.firstSeenAt,
       lastSeenAt: row.lastSeenAt,
     };
+  }
+}
+
+function parseJsonObject(value: string | null): BoatAnalysisDetails {
+  if (!value) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
   }
 }

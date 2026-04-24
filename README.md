@@ -1,8 +1,12 @@
 # Canoe Hunter
 
-Canoe Hunter monitors Craigslist for canoe listings near a configured ZIP code, stores seen listings in SQLite, scores new listings with OpenAI, scans listing photos when available, and sends alerts for strong matches.
+Canoe Hunter monitors Craigslist for canoe listings near a configured ZIP code, stores seen listings in SQLite, scores new listings with OpenAI, scans all listing photos when available, and sends alerts for strong matches.
 
 It does not scrape Facebook Marketplace.
+
+## Design Intent
+
+The target is a "Beer-Forward Fishing Canoe": a stable, sturdy, lightweight, stashable, low-cost pond fishing platform for two people. The ideal boat can be rowed from either end with simple oarlocks, letting two people sit near opposite ends facing the middle so they can pass off rowing, keep forward movement, keep tension on multiple fishing lines, and handle wind without turning the outing into sporty paddling.
 
 ## Setup
 
@@ -131,11 +135,12 @@ Regions:
 
 Search terms focus on the must-have list: Coleman RamX/Ram-X, Sportspal, Radisson, Old Town Hunter 14, Old Town Stillwater 14, Old Town Osprey 140, Royalex, ABS, fiberglass, and 13-14 foot canoe variants.
 
+The app also searches for light rowboats, aluminum rowboats, fiberglass rowboats, 13-14 foot rowboats, and rowboats with oarlocks.
+
 Before fetching detail pages, the app filters out obvious non-matches:
 
 - Wanted, WTB, ISO, and "looking for" posts.
-- Kayaks, paddleboards, rafts, inflatables, dinghies, rowboats, and jon boats.
-- Aluminum or Grumman canoes.
+- Kayaks, paddleboards, rafts, inflatables, dinghies, and jon boats.
 - Titles that clearly say 15 feet or longer.
 - Paddle-only or oar-only listings.
 - Listings over `MAX_PRICE`.
@@ -151,7 +156,7 @@ An alert is sent only when:
 
 ## Extracted Canoe Details
 
-For each new listing, OpenAI extracts a canoe dossier from the posting text and up to four listing photos:
+For each new listing, OpenAI extracts a canoe dossier from the posting text and all listing photos:
 
 - Make/model
 - Exact or estimated length
@@ -165,6 +170,14 @@ For each new listing, OpenAI extracts a canoe dossier from the posting text and 
 - Offer strategy
 - Distance from `SEARCH_POSTAL`, when Craigslist exposes coordinates
 - Photo findings, such as hull shape, keel, bottom wear, seats, paddles, material clues, or visible damage
+- Photo quality score and assessment, based on whether the photos show useful angles like exterior hull, underside, wear areas, and accessories
+- Full checklist fields for boat type, make, model, year, length, weight, negotiability, material, hull shape, stability, fishing layout, oars/oarlocks, condition, mod potential, extras, portage score, and match score
+
+The dashboard displays every listing photo as a clickable gallery.
+
+Each dashboard card also includes an `Export PDF` link that generates a camp-style field report for that listing.
+
+The dashboard also has an `Export Top 10 PDF` link for a ranked summary of the best scored candidates.
 
 ## Example Alert Email
 

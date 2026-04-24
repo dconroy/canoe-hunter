@@ -50,6 +50,7 @@ export function formatAlertMessage({ listing, score }: ListingWithScore): string
     score.offerRangeBottom === null && score.offerRangeTop === null
       ? 'No offer recommended'
       : `$${score.offerRangeBottom ?? score.offerRangeTop}-$${score.offerRangeTop ?? score.offerRangeBottom}`;
+  const details = score.analysisDetails;
 
   return `
 Strong canoe match found
@@ -68,9 +69,19 @@ Material: ${score.materialGuess}
 Estimated condition: ${score.estimatedCondition}
 Estimated weight: ${score.estimatedWeight}
 Distance: ${listing.distanceMiles === null ? 'Unknown' : `${listing.distanceMiles} miles`}
+Photo quality: ${score.photoQualityScore}/100 (${score.photoCountAnalyzed} photos analyzed)
+Photo assessment: ${score.photoQualityAssessment}
 Offer range: ${offerRange}
 Offer strategy: ${score.offerStrategy}
 Price assessment: ${score.priceAssessment}
+
+Boat fit:
+Type: ${details.BOAT_TYPE ?? 'Unknown'}
+Hull: ${details.HULL_SHAPE ?? 'Unknown'}
+Stability: ${details.STABILITY_SCORE_1_10 ?? 'Unknown'}/10
+Fishing friendly: ${details.FISHING_FRIENDLY ?? 'Unknown'}
+Portage: ${details.PORTAGE_SCORE_1_10 ?? 'Unknown'}/10
+Match: ${details.MATCH_SCORE_1_10 ?? 'Unknown'}/10
 
 Photo findings:
 ${photoFindings}
