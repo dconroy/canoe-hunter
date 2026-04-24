@@ -223,15 +223,9 @@ function renderListingPdf(listing: DashboardListing, stream: NodeJS.WritableStre
   const offerRange = formatOfferRange(listing.offerRangeBottom, listing.offerRangeTop) ?? 'No offer recommended';
 
   doc.pipe(stream);
-  doc.rect(0, 0, doc.page.width, doc.page.height).fill('#f8e3bd');
-  doc.lineWidth(4).strokeColor('#3c2415').roundedRect(28, 28, doc.page.width - 56, doc.page.height - 56, 18).stroke();
-  doc.fillColor('#163f2d').fontSize(11).font('Helvetica-Bold').text('CANOE HUNTER FIELD REPORT', 48, 50);
-  doc.fillColor('#3c2415').fontSize(28).font('Helvetica-Bold').text(listing.title, 48, 72, { width: 420 });
-  doc.fillColor('#624126').fontSize(11).font('Helvetica-Bold').text(`${price}  |  ${listing.location ?? 'Unknown location'}  |  ${listing.distanceMiles ?? 'Unknown'} miles`, 48, 110);
-
-  doc.roundedRect(468, 54, 82, 82, 12).fillAndStroke('#f7bd54', '#3c2415');
-  doc.fillColor('#3c2415').fontSize(9).font('Helvetica-Bold').text('SCORE', 486, 72, { width: 48, align: 'center' });
-  doc.fontSize(28).text(String(listing.matchScore ?? '--'), 486, 88, { width: 48, align: 'center' });
+  drawArcadePage(doc);
+  drawArcadeHeader(doc, 'CANOE HUNTER FIELD REPORT', listing.title, `${price}  |  ${listing.location ?? 'Unknown location'}  |  ${listing.distanceMiles ?? 'Unknown'} miles`);
+  drawScoreBadge(doc, listing.matchScore, 468, 54);
 
   let y = 150;
   y = pdfSection(doc, 'Core Fit', y, [
@@ -272,11 +266,8 @@ function renderTopTenPdf(listings: DashboardListing[], stream: NodeJS.WritableSt
   const doc = new PDFDocument({ margin: 42, size: 'LETTER' });
 
   doc.pipe(stream);
-  doc.rect(0, 0, doc.page.width, doc.page.height).fill('#f8e3bd');
-  doc.lineWidth(4).strokeColor('#3c2415').roundedRect(28, 28, doc.page.width - 56, doc.page.height - 56, 18).stroke();
-  doc.fillColor('#163f2d').fontSize(11).font('Helvetica-Bold').text('CANOE HUNTER', 48, 50);
-  doc.fillColor('#3c2415').fontSize(30).font('Helvetica-Bold').text('Top 10 Field Board', 48, 70);
-  doc.fillColor('#624126').fontSize(11).font('Helvetica').text('Highest-scoring Beer-Forward Fishing Canoe candidates.', 48, 108);
+  drawArcadePage(doc);
+  drawArcadeHeader(doc, 'CANOE HUNTER', 'Top 10 Field Board', 'Highest-scoring Beer-Forward Fishing Canoe candidates.');
 
   let y = 140;
 
@@ -289,15 +280,16 @@ function renderTopTenPdf(listings: DashboardListing[], stream: NodeJS.WritableSt
   listings.forEach((listing, index) => {
     if (y > 680) {
       doc.addPage();
-      doc.rect(0, 0, doc.page.width, doc.page.height).fill('#f8e3bd');
+      drawArcadePage(doc);
       y = 48;
     }
 
     const price = listing.price === null ? 'Unknown price' : `$${listing.price}`;
     const offerRange = formatOfferRange(listing.offerRangeBottom, listing.offerRangeTop) ?? 'No offer';
 
-    doc.roundedRect(48, y, 500, 72, 10).fillAndStroke('rgba(255, 242, 214, 0.8)', '#3c2415');
-    doc.fillColor('#a73525').fontSize(9).font('Helvetica-Bold').text(`#${index + 1}`, 62, y + 12);
+    doc.roundedRect(48, y, 500, 72, 10).fillAndStroke('#fff2d6', '#3c2415');
+    doc.roundedRect(56, y + 10, 28, 28, 8).fillAndStroke('#ff8a16', '#3c2415');
+    doc.fillColor('#3c2415').fontSize(9).font('Helvetica-Bold').text(`#${index + 1}`, 62, y + 20);
     doc.fillColor('#3c2415').fontSize(14).font('Helvetica-Bold').text(listing.title, 92, y + 10, { width: 330 });
     doc.fillColor('#624126').fontSize(9).font('Helvetica-Bold').text(
       `${price} | ${listing.location ?? 'Unknown'} | ${listing.distanceMiles ?? 'Unknown'} mi | offer ${offerRange}`,
@@ -311,24 +303,22 @@ function renderTopTenPdf(listings: DashboardListing[], stream: NodeJS.WritableSt
       y + 46,
       { width: 350 },
     );
-    doc.fillColor('#3c2415').fontSize(9).font('Helvetica-Bold').text('SCORE', 470, y + 13, { width: 50, align: 'center' });
-    doc.fontSize(24).text(String(listing.matchScore ?? '--'), 470, y + 28, { width: 50, align: 'center' });
+    drawScoreBadge(doc, listing.matchScore, 462, y + 10, 58);
     y += 84;
   });
 
   listings.forEach((listing) => {
     doc.addPage();
-    doc.rect(0, 0, doc.page.width, doc.page.height).fill('#f8e3bd');
-    doc.lineWidth(3).strokeColor('#3c2415').roundedRect(28, 28, doc.page.width - 56, doc.page.height - 56, 18).stroke();
-    doc.fillColor('#163f2d').fontSize(10).font('Helvetica-Bold').text('TOP 10 DETAIL SHEET', 48, 48);
-    doc.fillColor('#3c2415').fontSize(22).font('Helvetica-Bold').text(listing.title, 48, 66, { width: 420 });
-    doc.fillColor('#624126').fontSize(10).text(
+    drawArcadePage(doc);
+    drawArcadeHeader(
+      doc,
+      'TOP 10 DETAIL SHEET',
+      listing.title,
       `${listing.price === null ? 'Unknown price' : `$${listing.price}`} | ${listing.location ?? 'Unknown'} | ${listing.distanceMiles ?? 'Unknown'} miles | Score ${listing.matchScore ?? '--'}`,
-      48,
-      94,
     );
+    drawScoreBadge(doc, listing.matchScore, 468, 54);
 
-    let detailY = 124;
+    let detailY = 132;
     detailY = pdfSection(doc, 'Core Fit', detailY, [
       ['Make / Model', listing.makeModel ?? listing.likelyModel],
       ['Length', listing.exactLength ?? listing.estimatedLength],
@@ -344,6 +334,36 @@ function renderTopTenPdf(listings: DashboardListing[], stream: NodeJS.WritableSt
   });
 
   doc.end();
+}
+
+function drawArcadePage(doc: PDFKit.PDFDocument): void {
+  doc.rect(0, 0, doc.page.width, doc.page.height).fill('#f8e3bd');
+  doc.rect(0, 0, doc.page.width, 18).fill('#ff8a16');
+  doc.rect(0, doc.page.height - 18, doc.page.width, 18).fill('#163f2d');
+  doc.lineWidth(5).strokeColor('#3c2415').roundedRect(28, 28, doc.page.width - 56, doc.page.height - 56, 18).stroke();
+  doc.lineWidth(2).strokeColor('#ffd24a').roundedRect(36, 36, doc.page.width - 72, doc.page.height - 72, 14).stroke();
+  drawCrosshair(doc, doc.page.width - 78, 64, 28);
+}
+
+function drawArcadeHeader(doc: PDFKit.PDFDocument, eyebrow: string, title: string, subtitle: string): void {
+  doc.roundedRect(48, 46, 394, 82, 12).fillAndStroke('#163f2d', '#3c2415');
+  doc.fillColor('#ffd24a').fontSize(10).font('Helvetica-Bold').text(eyebrow, 66, 60);
+  doc.fillColor('#fff2d6').fontSize(24).font('Helvetica-Bold').text(title, 66, 78, { width: 350, height: 30 });
+  doc.fillColor('#fff2d6').fontSize(9).font('Helvetica-Bold').text(subtitle, 66, 110, { width: 350 });
+}
+
+function drawScoreBadge(doc: PDFKit.PDFDocument, score: number | null, x: number, y: number, size = 82): void {
+  doc.roundedRect(x, y, size, size, 12).fillAndStroke('#ff8a16', '#3c2415');
+  doc.lineWidth(2).strokeColor('#ffd24a').roundedRect(x + 6, y + 6, size - 12, size - 12, 8).stroke();
+  doc.fillColor('#3c2415').fontSize(8).font('Helvetica-Bold').text('SCORE', x + 12, y + 17, { width: size - 24, align: 'center' });
+  doc.fontSize(size > 70 ? 28 : 20).text(String(score ?? '--'), x + 12, y + 34, { width: size - 24, align: 'center' });
+}
+
+function drawCrosshair(doc: PDFKit.PDFDocument, x: number, y: number, radius: number): void {
+  doc.lineWidth(2).strokeColor('#ffd24a').circle(x, y, radius).stroke();
+  doc.moveTo(x - radius - 8, y).lineTo(x + radius + 8, y).stroke();
+  doc.moveTo(x, y - radius - 8).lineTo(x, y + radius + 8).stroke();
+  doc.circle(x, y, 4).fill('#ffd24a');
 }
 
 function pdfAnalysisSections(
