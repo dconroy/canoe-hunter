@@ -465,6 +465,10 @@ export class CanoeHunterDb {
           AND lower(listings.title) NOT GLOB '*patched*'
           AND lower(listings.title) NOT GLOB '*soft spot*'
           AND lower(listings.title) NOT GLOB '*delaminat*'
+          AND listings.imageUrls IS NOT NULL
+          AND listings.imageUrls != ''
+          AND listings.imageUrls != '[]'
+          AND (scores.matchScore IS NULL OR scores.matchScore > 0)
         ORDER BY scores.matchScore IS NULL, scores.matchScore DESC, listings.firstSeenAt DESC
         LIMIT ?
       `,

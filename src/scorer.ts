@@ -38,8 +38,101 @@ export class ListingScorer {
       throw new Error('OpenAI returned an empty scoring response');
     }
 
-    return normalizeScore(JSON.parse(content));
+    const normalized = normalizeScore(JSON.parse(content));
+    return applyDeterministicAdjustments(normalized, listing, this.config);
   }
+}
+
+function applyDeterministicAdjustments(score: ScoreResult, listing: Listing, config: AppConfig): ScoreResult {
+  const base = score.matchScore;
+
+  if (base <= 25) {
+    return score;
+  }
+
+  const adjustments: Array<{ label: string; delta: number }> = [];
+
+  if (listing.distanceMiles !== null) {
+    const distance = listing.distanceMiles;
+    const distanceAdj = clampNumber(10 - 0.16 * distance, -8, 10);
+    if (Math.abs(distanceAdj) >= 0.5) {
+      adjustments.push({ label: `${distance} mi from base`, delta: distanceAdj });
+    }
+  }
+
+  if (listing.price !== null && listing.price > 0 && listing.price <= config.maxPrice) {
+    const ratio = 1 - listing.price / config.maxPrice;
+    const priceAdj = clampNumber(ratio * 8, 0, 6);
+    if (priceAdj >= 0.5) {
+      adjustments.push({ label: `priced ${Math.round(ratio * 100)}% under budget`, delta: priceAdj });
+    }
+  }
+
+  if (score.photoQualityScore > 0) {
+    const pqAdj = clampNumber((score.photoQualityScore - 60) / 12, -4, 4);
+    if (Math.abs(pqAdj) >= 0.5) {
+      adjustments.push({ label: `photo quality ${score.photoQualityScore}/100`, delta: pqAdj });
+    }
+  }
+
+  const photoCount = new Set(listing.imageUrls).size;
+  if (photoCount === 1) {
+    adjustments.push({ label: 'only one photo', delta: -5 });
+  } else if (photoCount === 2) {
+    adjustments.push({ label: 'only two photos', delta: -2 });
+  } else if (photoCount >= 6) {
+    adjustments.push({ label: `${photoCount} photos provided`, delta: 1.5 });
+  }
+
+  const modelHaystack = `${score.makeModel ?? ''} ${score.likelyModel ?? ''}`.toLowerCase();
+  if (/\b(old town hunter|stillwater|osprey 140|sportspal|radisson|coleman ram[\s-]?x)\b/.test(modelHaystack)) {
+    adjustments.push({ label: 'preferred-list model', delta: 5 });
+  } else if (/\b(mohawk|wenonah|grumman|old town|alumacraft)\b/.test(modelHaystack)) {
+    adjustments.push({ label: 'known brand', delta: 2 });
+  }
+
+  const knownFields = countKnown(score.analysisDetails);
+  const completenessAdj = clampNumber((knownFields - 18) / 4, -3, 3);
+  if (Math.abs(completenessAdj) >= 0.5) {
+    adjustments.push({ label: `${knownFields} fields known`, delta: completenessAdj });
+  }
+
+  const totalDelta = adjustments.reduce((sum, item) => sum + item.delta, 0);
+  const cappedDelta = clampNumber(totalDelta, -15, 18);
+  const adjusted = clampNumber(Math.round(base + cappedDelta), 0, 100);
+
+  if (adjustments.length === 0 || cappedDelta === 0) {
+    return score;
+  }
+
+  const summary = adjustments
+    .map((item) => `${item.label} ${item.delta >= 0 ? '+' : ''}${formatDelta(item.delta)}`)
+    .join(', ');
+  const note = `Auto adjustment ${cappedDelta >= 0 ? '+' : ''}${formatDelta(cappedDelta)} (${summary})`;
+
+  return {
+    ...score,
+    matchScore: adjusted,
+    reasonsForMatch: [...score.reasonsForMatch, note],
+  };
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function formatDelta(value: number): string {
+  return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
+}
+
+function countKnown(details: BoatAnalysisDetails): number {
+  return Object.values(details).filter((value) => {
+    if (value === null || value === undefined) {
+      return false;
+    }
+    const str = String(value).trim().toLowerCase();
+    return str.length > 0 && str !== 'unknown' && str !== 'null';
+  }).length;
 }
 
 function buildUserContent(listing: Listing): OpenAI.Chat.Completions.ChatCompletionContentPart[] {
@@ -192,7 +285,7 @@ Extraction requirements:
 - photoQualityScore: 0-100 score for how useful the photos are for judging the canoe. Score high only when photos show multiple useful angles including exterior hull and bottom/underside. Score low when photos are missing, blurry, too few, mostly closeups, or fail to show condition-critical areas.
 - photoQualityAssessment: concise explanation of the photoQualityScore and what important angles are missing.
 - photoCountAnalyzed: number of photos you actually inspected.
-- If only one usable photo is available, subtract 5 points from matchScore for uncertainty. Mention the single-photo penalty in redFlags or priceAssessment. Do not let this penalty override hard caps.
+- If only one usable photo is available, mention it in redFlags or priceAssessment. The system applies the numeric photo-count penalty automatically, so do not subtract points for it yourself.
 - analysisDetails: fill every key. Use "unknown" or null where evidence is missing. Infer carefully from text and photos, and do not invent certainty.
 
 Checklist scoring guidance:
@@ -202,21 +295,32 @@ Checklist scoring guidance:
 - Match score 1-10 should summarize the buyer fit independent of the 0-100 alert score.
 - Favor boats that solve the "two rowers facing inward while managing multiple fishing lines" use case. Penalize boats that only make sense as solo paddlers or have layouts that would tangle lines or block oarlock retrofit.
 
-Distance scoring adjustment:
-- Use distanceMiles from the listing when present.
-- Add up to +10 points for close listings: +10 for 0-15 miles, +7 for 16-30 miles, +4 for 31-50 miles.
-- Taper scores beyond 50 miles without over-penalizing otherwise strong listings: 0 for 51-75 miles, -2 for 76-100 miles, -5 for 101-130 miles, -8 for over 130 miles.
-- If distance is unknown, apply no distance adjustment.
-- Apply distance after evaluating model, price, condition, and photos, but never let distance override hard score caps or make a damaged/poor listing alert-worthy.
-- Mention the distance adjustment in reasonsForMatch or redFlags when it materially changes the score.
+Distance:
+- The system applies a deterministic distance adjustment based on distanceMiles after you score. Do not bake distance into matchScore yourself.
+- You may still mention distance qualitatively in reasonsForMatch or redFlags (e.g., "a long haul from base" or "close pickup").
 
-Score strictly and obey these hard caps:
+Scoring discipline (very important):
+- matchScore is a "core fit" score from 0 to 100 based purely on the canoe itself: model match, length, material, condition, hull integrity, fishing/rowing suitability, and listing quality. It must NOT include distance, price-vs-budget, photo-count, or model-bonus adjustments - the system handles those after.
+- Use the FULL 0-100 range. Avoid round-number anchoring like 70/75/80. Two listings that are both "pretty good but different" must get different numbers (e.g., 71 vs 76 vs 82). Pick a number that reflects the specific evidence, not a default bucket.
+- Walk through the rubric below and add/subtract specific points. Show your math implicitly by landing on a non-round score.
+
+Core-fit rubric (build matchScore from these, target distinct integers):
+- Start from a base of 50.
+- +0 to +20 for model match strength (named preferred model > known good brand > generic 13-14 ft canoe > unknown).
+- +0 to +12 for length match (14 ft = full credit, 13 ft = strong, 12 or 15 = partial, outside = small/none).
+- +0 to +10 for material/build quality fit (Royalex/ABS/Coleman RamX/quality fiberglass = full, generic poly/aluminum = partial).
+- +0 to +12 for condition evidence (excellent solid hull = full, good with minor wear = strong, fair = small, project = negative).
+- +0 to +8 for fishing/rowing suitability (open interior, flat-ish floor, two-person, oarlock-friendly).
+- -5 to -25 for vagueness or missing critical info (no length, no material, no condition, no usable photos of hull/bottom).
+- Apply hard caps below before returning.
+
+Hard caps (these override the rubric):
 - 0-10: wanted/ISO posts, kayaks, inflatables, paddle-only listings, or listings that are not selling a canoe.
 - 0-15: obvious leaks, holes, cracked hulls, serious underside wear, soft spots, delamination, or unsafe structural damage.
 - 0-25: any listing that says it needs repair, has patched damage, has unknown leak status but visible damage, or sounds like a project boat.
 - 0-35: listings over ${maxPrice}, non-portable boats, or boats with poor retrofit/fishing suitability.
 - 0-45: vague listings with no useful condition, length, material, or model details.
-- 70+: only clean, plausible 13-14 foot candidates under ${maxPrice} with no leak/damage concerns.
+- 70+: only clean, plausible 13-14 foot candidates with no leak/damage concerns.
 
 Do not give a damaged canoe a medium score just because it is cheap or a preferred model. Damage beats price and model. If leaks, cracks, holes, serious underside wear, or repair needs are mentioned, shouldAlert must be false.
 

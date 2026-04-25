@@ -175,10 +175,15 @@ export function isRelevantSummary(summary: ListingSummary): boolean {
     return false;
   }
 
-  if (
-    /\b(paddle|paddles|oar|oars)\b/.test(title) &&
-    !/\b(canoe|rowboat|sportspal|radisson|ramx|ram-x|old town)\b/.test(title)
-  ) {
+  const mentionsAccessory = /\b(paddle|paddles|oar|oars|oares|ores|seat|seats|cushion|cushions|life ?jacket|life ?jackets|pfd|pfds|trolling motor|motor mount|anchor|cooler|trailer only|just the trailer)\b/.test(
+    title,
+  );
+  const mentionsLength = /\b(13|14)\s*(ft|foot|feet|'|")/.test(title);
+  const mentionsModel = /\b(coleman|sportspal|radisson|ramx|ram-x|royalex|grumman|old town|mohawk|wenonah|osprey|stillwater|hunter 14|alumacraft)\b/.test(
+    title,
+  );
+
+  if (mentionsAccessory && !mentionsLength && !mentionsModel) {
     return false;
   }
 

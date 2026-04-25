@@ -59,6 +59,12 @@ async function runHunt(): Promise<void> {
           }
 
           const listing = existing ? summaryToListing(summary) : await fetchNewListingDetails(summary);
+
+          if (listing.imageUrls.length === 0) {
+            console.log(`Skipping photoless listing: ${listing.title}`);
+            continue;
+          }
+
           const { isNew } = db.upsertListing(listing);
           seenCount += 1;
 
