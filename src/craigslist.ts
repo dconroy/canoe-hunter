@@ -158,6 +158,7 @@ export function isRelevantSummary(summary: ListingSummary): boolean {
   }
 
   const title = summary.title.toLowerCase();
+  const normalizedTitle = title.replace(/[-_]/g, ' ');
 
   if (hasDealbreakerDamageLanguage(title)) {
     return false;
@@ -167,7 +168,11 @@ export function isRelevantSummary(summary: ListingSummary): boolean {
     return false;
   }
 
-  if (/\b(kayak|kayaks|paddleboard|sup|raft|inflatable|dinghy|jon boat)\b/.test(title)) {
+  if (/\b(kayak|kayaks|paddleboard|sup|raft|inflatable)\b/.test(title)) {
+    return false;
+  }
+
+  if (isNonCanoeBoatType(normalizedTitle)) {
     return false;
   }
 
@@ -179,16 +184,20 @@ export function isRelevantSummary(summary: ListingSummary): boolean {
     title,
   );
   const mentionsLength = /\b(13|14)\s*(ft|foot|feet|'|")/.test(title);
-  const mentionsModel = /\b(coleman|sportspal|radisson|ramx|ram-x|royalex|grumman|old town|mohawk|wenonah|osprey|stillwater|hunter 14|alumacraft)\b/.test(
-    title,
+  const mentionsCanoeModel = /\b(coleman|sportspal|radisson|ramx|ram x|royalex|grumman canoe|old town|mohawk canoe|wenonah|osprey 140|stillwater|hunter 14)\b/.test(
+    normalizedTitle,
   );
 
-  if (mentionsAccessory && !mentionsLength && !mentionsModel) {
+  if (mentionsAccessory && !mentionsLength && !mentionsCanoeModel) {
     return false;
   }
 
-  return /\b(canoe|rowboat|sportspal|radisson|ramx|ram-x|royalex|fiberglass|aluminum|alum|grumman|old town|hunter 14|stillwater|osprey 140)\b/.test(
-    title,
+  return /\bcanoe\b/.test(normalizedTitle) || mentionsCanoeModel;
+}
+
+export function isNonCanoeBoatType(normalizedTitle: string): boolean {
+  return /\b(jon ?boat|jonny ?boat|john ?boat|johnny ?boat|v[\s-]?bottom|v[\s-]?hull|vee[\s-]?bottom|vee[\s-]?hull|bass boat|bass tracker|jet ski|jetski|pwc|pontoon|sail ?boat|sailing|dinghy|dingy|motorboat|motor boat|row ?boat|rowboat|skiff|dory|pram|trihull|tri[\s-]?hull|hydroplane|runabout|bowrider|bayliner|jetboat|fishing boat)\b/.test(
+    normalizedTitle,
   );
 }
 

@@ -247,7 +247,7 @@ Return only valid JSON with exactly these fields:
 
 Buyer preferences:
 - Price must be ${maxPrice} or less. A listing at ${maxPrice} must look like it is in good shape.
-- Target boat type is canoe or light rowboat.
+- Target boat type is CANOE ONLY. Hard rejection (matchScore 0-10, shouldAlert false) for any of: jon boat, jonny boat, johnboat, john boat, johnny boat, jonboat, v-bottom, v-hull, vee-bottom, bass boat, bass tracker, skiff, pontoon, sailboat, dinghy, dory, pram, runabout, bowrider, motorboat, jet ski, kayak, paddleboard/SUP, raft, inflatable, rowboat (even an aluminum or fiberglass rowboat - they are not canoes), generic "fishing boat" that is not clearly a canoe. Set BOAT_TYPE accordingly and explain in redFlags.
 - Use case: "Beer-Forward Fishing Canoe" - a stable, sturdy, lightweight, stashable, low-cost fishing platform for two people. The goal is not sporty paddling; it is relaxed pond fishing with four lines out, keeping movement and line tension, handling wind, and letting either person take over rowing.
 - Ideal setup: two people sit near opposite ends facing the middle. Oarlocks can be installed on either side so either person can row/pass off oars without tangling lines.
 - Prefer at least 13 feet; ideal is 14-15 feet if weight and handling stay reasonable.
@@ -315,7 +315,7 @@ Core-fit rubric (build matchScore from these, target distinct integers):
 - Apply hard caps below before returning.
 
 Hard caps (these override the rubric):
-- 0-10: wanted/ISO posts, kayaks, inflatables, paddle-only listings, or listings that are not selling a canoe.
+- 0-10: wanted/ISO posts, kayaks, inflatables, paddle-only listings, or any boat that is NOT a canoe (jon boats, johnboats, v-bottom/v-hull boats, skiffs, bass boats, pontoons, sailboats, rowboats, dinghies, dories, prams, runabouts, motorboats, jet skis, etc.).
 - 0-15: obvious leaks, holes, cracked hulls, serious underside wear, soft spots, delamination, or unsafe structural damage.
 - 0-25: any listing that says it needs repair, has patched damage, has unknown leak status but visible damage, or sounds like a project boat.
 - 0-35: listings over ${maxPrice}, non-portable boats, or boats with poor retrofit/fishing suitability.
